@@ -9,27 +9,59 @@
 <body class="bg-light">
     <div class="container py-5">
         <h1 class="text-center mb-4">📍 Status Toko Tomoro Coffee</h1>
-        <div class="row">
-            <% stores.forEach(store => { %>
-            <div class="col-md-6 mb-3">
-                <div class="card shadow-sm h-100">
-                    <div class="card-body">
-                        <h5 class="card-title text-danger fw-bold"><%= store.storeName %></h5>
-                        <p class="mb-2"><small class="text-muted"><%= store.storeAddress %></small></p>
-                        <p class="mb-2"><strong>Jarak:</strong> <%= store.distance %> meter</p>
-                        
-                        <% if (store.businessStatus === 2) { %>
-                            <p class="text-success fw-bold mb-1">✅ BUKA</p>
-                            <a href="/menu/<%= store.storeCode %>" class="btn btn-danger btn-sm mt-2">Lihat Menu</a>
-                        <% } else { %>
-                            <p class="text-secondary fw-bold mb-1">❌ TUTUP / TIDAK TERSEDIA</p>
-                            <button class="btn btn-secondary btn-sm mt-2" disabled>Lihat Menu</button>
-                        <% } %>
+        
+        <div class="row justify-content-center mb-4">
+            <div class="col-md-8">
+                <input type="text" id="searchInput" class="form-control form-control-lg shadow-sm border-danger" placeholder="🔍 Cari nama toko atau alamat (contoh: Kuningan, Sudirman)...">
+            </div>
+        </div>
+
+        <div class="row" id="storeContainer">
+            <% if (stores.length === 0) { %>
+                <div class="col-12 text-center mt-5">
+                    <div class="alert alert-danger" role="alert">
+                        <strong>Gagal memuat data!</strong> Token API mungkin sudah expired atau terjadi kesalahan jaringan. Silakan perbarui wToken di server.js.
                     </div>
                 </div>
-            </div>
-            <% }) %>
+            <% } else { %>
+                <% stores.forEach(store => { %>
+                <div class="col-md-6 mb-3 store-card">
+                    <div class="card shadow-sm h-100">
+                        <div class="card-body">
+                            <h5 class="card-title text-danger fw-bold store-name"><%= store.storeName %></h5>
+                            <p class="mb-2"><small class="text-muted store-address"><%= store.storeAddress %></small></p>
+                            
+                            <% if (store.businessStatus === 0) { %>
+                                <p class="text-success fw-bold mb-1 mt-3">✅ BUKA</p>
+                                <a href="/menu/<%= store.storeCode %>" class="btn btn-danger btn-sm mt-2">Lihat Menu</a>
+                            <% } else { %>
+                                <p class="text-secondary fw-bold mb-1 mt-3">❌ TUTUP</p>
+                                <button class="btn btn-secondary btn-sm mt-2" disabled>Lihat Menu</button>
+                            <% } %>
+                        </div>
+                    </div>
+                </div>
+                <% }) %>
+            <% } %>
         </div>
     </div>
+
+    <script>
+        document.getElementById('searchInput').addEventListener('keyup', function() {
+            let filterText = this.value.toLowerCase();
+            let storeCards = document.querySelectorAll('.store-card');
+            
+            storeCards.forEach(card => {
+                let storeName = card.querySelector('.store-name').innerText.toLowerCase();
+                let storeAddress = card.querySelector('.store-address').innerText.toLowerCase();
+                
+                if (storeName.includes(filterText) || storeAddress.includes(filterText)) {
+                    card.style.display = ''; 
+                } else {
+                    card.style.display = 'none'; 
+                }
+            });
+        });
+    </script>
 </body>
 </html>

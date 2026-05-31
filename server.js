@@ -19,27 +19,70 @@ function getTomoroHeaders() {
         "deviceCode": "19fb25e2e6ebebd3",
         "revision": "3.4.3",
         "timeZone": "Asia/Bangkok",
-        "token": "ucde:t698",
+        "token": "",
         "User-Agent": "okhttp/5.1.0",
-        "wToken": "0004_9E7C1699FD35C9FA792D5D6FA79A1B51F652DEE73EE56A51619A400BA33D5B66C7AA0841EB04A19B41877241EB2E2E1FA8B75019A0A8c+D4MDF+ShD2+hGncElDKBcyiYGtaRYj+JJtpL4c3FA0fv/KVW43SlH0yzTd4QQBIk8QFKrzlw/M1GMW+6EkkmsXJX1oit0kQ0wi4QRiANh43EwAQPIbguXrRiYYzYDTg0F3CJxGZFEWylNZtBcOocVt9RN9JXhOeTNRisNhcJEoldwiNoxSKMKGiFUrfpep0IA6Hwi7YmNNTz/DK9kPH/Nes2BcBqgt78gKtcpLAPxFbsIMIkyVRDwFbB9/huMkcLmlnqNpvAlrbIy5epNfB93oAVDMKIE97euRPytmMO6i2XlqcPc7Ls3ukhYQumK/QsIr9FBuvOxV8w8/50xdihzuulnP/hlLyL0F3E9qNGsulBvHANnWd+CGhtd9UkI7JyvilnePzvch7EWDe1yYa3zqvTQwNEizajM/ordtRgFqE0XzTEP2gA4G6mnVAKu163N9589lVzHlhjir0lC39i8e2dVKTn1x6fxS6F4x+GceFjESKwQRF/pdZ577rTxKCRc/StvUYOzGjRryrR56V1iu1OvBsKzMIGqfVZ16XooM9L2gK70FQlP2HxUlyB6Lhx0qd6/TV+VbR7WpgjU297et+YyYV0XZ/ZZK1Luu+Xh7usaR+nG3XdR0yu9ntXKCmgWtSRKQJWyb7DZcNv8f0TbwB/sPdpGpGz7WMrASOvTu4W6T+qTaoGE/aIz9GjlhvyFSUX5KCtDCUcjWPCjyDTCaukh6g9hyNYsuX6UhmMhcl8G7nX+58TeLaPgdr+esYLtcKgGan8leVKk3iw7zJg==_fHw=_ddb6cb8e14fec33a-h-1780198306324-02d1e60bfd2a448bac1509fff1e65003"
+        "wToken": ""
     };
 }
 
+// VARIABEL CACHE GLOBAL
+let cachedStores = [];
+let lastFetchTime = 0;
+const CACHE_DURATION = 60 * 60 * 1000; // 1 Jam (dalam milidetik)
+
 // 1. Route Halaman Utama: Daftar Toko Tomoro
 app.get('/', async (req, res) => {
-    // Koordinat default mengarah ke area Jakarta
-    const url = "https://api-service.tomoro-coffee.id/portal/app/basic/storeInfo/getStoreList/v3?pageNo=1&centerPointLatitude=-6.214722096666667&centerPointLongitude=106.84500128033334&pageSize=20";
+    // CEK CACHE: Jika data sudah ada dan belum 1 jam, gunakan data yang disimpan!
+    if (cachedStores.length > 0 && (Date.now() - lastFetchTime < CACHE_DURATION)) {
+        console.log("⚡ Menggunakan data toko dari Cache (Sangat Cepat!)");
+        return res.render('index', { stores: cachedStores });
+    }
 
     try {
-        const response = await axios.get(url, { headers: getTomoroHeaders() });
-        const stores = response.data?.data?.records || [];
-        res.render('index', { stores });
+        console.log("🚀 Menarik data toko secara paralel dari API...");
+        const pagePromises = [];
+        const MAX_PAGES = 25; // 25 halaman x 50 toko = Kapasitas 1250 toko seluruh Indonesia
+
+        // Tembak 25 halaman sekaligus secara bersamaan!
+        for (let pageNo = 1; pageNo <= MAX_PAGES; pageNo++) {
+            const url = `https://api-service.tomoro-coffee.id/portal/app/basic/storeInfo/getStoreList/v3?pageNo=${pageNo}&centerPointLatitude=-6.214722&centerPointLongitude=106.845001&pageSize=50`;
+            
+            // Masukkan tugas ke dalam array (ditambah .catch agar kalau 1 halaman error, yang lain tetap jalan)
+            pagePromises.push(axios.get(url, { headers: getTomoroHeaders() }).catch(() => null));
+        }
+
+        // Tunggu semua kasir (request) selesai bersamaan
+        const responses = await Promise.all(pagePromises);
+        let allStores = [];
+
+        // Kumpulkan semua data yang berhasil didapat
+        responses.forEach(response => {
+            if (response && response.data?.data?.records) {
+                allStores = allStores.concat(response.data.data.records);
+            }
+        });
+
+        console.log(`✅ Selesai! Total toko yang ditarik: ${allStores.length}`);
+        
+        // SIMPAN KE CACHE agar request selanjutnya instan
+        if (allStores.length > 0) {
+            cachedStores = allStores;
+            lastFetchTime = Date.now();
+        }
+
+        res.render('index', { stores: allStores });
+
     } catch (error) {
-        console.error("Gagal mengambil data toko Tomoro:", error.message);
-        res.render('index', { stores: [] });
+        console.error("Gagal Request:", error.message);
+        
+        // Jika gagal API tapi ada cache lama, tampilkan cache lama. Jika tidak, kosong.
+        if (cachedStores.length > 0) {
+            res.render('index', { stores: cachedStores });
+        } else {
+            res.render('index', { stores: [] }); 
+        }
     }
 });
-
 // 2. Route Halaman Menu Berdasarkan storeCode
 app.get('/menu/:storeCode', async (req, res) => {
     const storeCode = req.params.storeCode;
@@ -50,8 +93,14 @@ app.get('/menu/:storeCode', async (req, res) => {
         const menuGroups = response.data?.data?.menuVos || [];
         res.render('menu', { storeCode, menuGroups });
     } catch (error) {
-        console.error(`Gagal mengambil menu untuk toko ${storeCode}:`, error.message);
-        res.render('menu', { storeCode, menuGroups: [] });
+        if (error.response) {
+            console.error("API Error Status:", error.response.status);
+            console.error("API Error Data:", JSON.stringify(error.response.data, null, 2));
+        } else {
+            console.error("Gagal Request:", error.message);
+        }
+        // PERBAIKAN DI BARIS INI: render 'menu', bukan 'index'
+        res.render('menu', { storeCode, menuGroups: [] }); 
     }
 });
 
